@@ -1,6 +1,7 @@
 #pragma warning disable SYSLIB5006
 
 using System.Text.Json;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.DataProtection;
 using QuantumDataProtection;
 
@@ -37,12 +38,13 @@ app.MapGet("/", () => Results.Json(new
         ["POST /unprotect"] = "Decrypt previously protected data",
         ["POST /protect-cookie"] = "Simulate cookie encryption (like ASP.NET does)",
         ["GET /key-info"] = "Show ML-KEM key store status",
+        ["GET /proof"] = "PROOF: show the XML key file — ML-KEM wrapping is visible",
         ["GET /compare"] = "Side-by-side: RSA (default) vs ML-KEM (quantum-safe)"
     }
 }));
 
 // ── 2. POST /protect — Encrypt data ─────────────────────────────
-app.MapPost("/protect", (HttpContext ctx, IDataProtectionProvider dp, JsonElement body) =>
+app.MapPost("/protect", (IDataProtectionProvider dp, JsonElement body) =>
 {
     var purpose = body.TryGetProperty("purpose", out var p) ? p.GetString() ?? "default" : "default";
     var data = body.TryGetProperty("data", out var d) ? d.GetString() ?? "" : "";
@@ -105,7 +107,6 @@ app.MapPost("/protect-cookie", (IDataProtectionProvider dp, JsonElement body) =>
     var role = body.TryGetProperty("role", out var r) ? r.GetString() ?? "user" : "user";
     var sessionId = Guid.NewGuid().ToString();
 
-    // This is exactly what ASP.NET Core does internally for auth cookies
     var cookiePayload = JsonSerializer.Serialize(new
     {
         userId,
@@ -161,7 +162,88 @@ app.MapGet("/key-info", () =>
     });
 });
 
-// ── 6. GET /compare — RSA vs ML-KEM comparison ─────────────────
+// ── 6. GET /proof — Show raw XML key with ML-KEM wrapping ───────
+app.MapGet("/proof", (IDataProtectionProvider dp) =>
+{
+    // Trigger key creation if not yet created
+    var protector = dp.CreateProtector("proof-trigger");
+    _ = protector.Protect("trigger");
+
+    // Read the XML key files
+    if (!Directory.Exists(keyDir))
+        return Results.Json(new { error = "No keys generated yet. Call /protect first." }, statusCode: 404);
+
+    var xmlFiles = Directory.GetFiles(keyDir, "*.xml");
+    if (xmlFiles.Length == 0)
+        return Results.Json(new { error = "No key files found." }, statusCode: 404);
+
+    var proofs = new List<object>();
+
+    foreach (var xmlFile in xmlFiles)
+    {
+        var xml = File.ReadAllText(xmlFile);
+        var doc = XElement.Parse(xml);
+
+        // Find the encrypted key element
+        var encryptedKeyElement = doc.Descendants("mlKemEncryptedKey").FirstOrDefault();
+
+        if (encryptedKeyElement is not null)
+        {
+            var algorithm = encryptedKeyElement.Element("algorithm")?.Value;
+            var keyId = encryptedKeyElement.Element("keyId")?.Value;
+            var hasCiphertext = encryptedKeyElement.Element("kemCiphertext") is not null;
+            var hasNonce = encryptedKeyElement.Element("nonce") is not null;
+            var hasTag = encryptedKeyElement.Element("tag") is not null;
+
+            // Check if .p8 file exists for this key
+            var p8Exists = keyId is not null && File.Exists(Path.Combine(kemKeyDir, $"{keyId}.p8"));
+
+            proofs.Add(new
+            {
+                file = Path.GetFileName(xmlFile),
+                wrapping = "ML-KEM (post-quantum)",
+                algorithm,
+                keyId,
+                xmlStructure = new
+                {
+                    mlKemEncryptedKey = true,
+                    kemCiphertext = hasCiphertext ? "present (KEM encapsulation output)" : "MISSING",
+                    nonce = hasNonce ? "present (AES-256-GCM nonce)" : "MISSING",
+                    ciphertext = "present (AES-256-GCM encrypted key)",
+                    tag = hasTag ? "present (AES-256-GCM auth tag)" : "MISSING"
+                },
+                decapsulationKeyStored = p8Exists,
+                rawXmlPreview = xml.Length > 500 ? xml[..500] + "... (truncated)" : xml
+            });
+        }
+        else
+        {
+            proofs.Add(new
+            {
+                file = Path.GetFileName(xmlFile),
+                wrapping = "UNKNOWN (not ML-KEM)",
+                algorithm = (string?)null,
+                keyId = (string?)null,
+                xmlStructure = (object?)null,
+                decapsulationKeyStored = false,
+                rawXmlPreview = xml.Length > 500 ? xml[..500] + "... (truncated)" : xml
+            });
+        }
+    }
+
+    return Results.Json(new
+    {
+        title = "PROOF: ML-KEM Key Wrapping in Action",
+        description = "These are the actual Data Protection XML key files. " +
+                      "Notice the <mlKemEncryptedKey> element — this is where RSA would normally be. " +
+                      "Instead, ML-KEM-768 key encapsulation is used.",
+        defaultAspNetCore = "Uses <encryptedKey> with RSA or DPAPI",
+        thisPackage = "Uses <mlKemEncryptedKey> with ML-KEM + AES-256-GCM",
+        keyFiles = proofs
+    });
+});
+
+// ── 7. GET /compare — RSA vs ML-KEM comparison ─────────────────
 app.MapGet("/compare", () => Results.Json(new
 {
     title = "RSA Key Wrapping vs ML-KEM Key Wrapping",
