@@ -58,7 +58,7 @@ public sealed class MlKemXmlDecryptor : IXmlDecryptor
             .GetAwaiter().GetResult()
             ?? throw new CryptographicException($"Decapsulation key '{keyId}' not found in key store.");
 
-        using var kemKey = MlKemKey.FromEncryptedPkcs8(_pkcs8Password, encryptedDecapKey);
+        using var kemKey = MlKemKey.FromEncryptedKey(_pkcs8Password, encryptedDecapKey);
 
         var sharedSecret = kemKey.Decapsulate(kemCiphertext);
 

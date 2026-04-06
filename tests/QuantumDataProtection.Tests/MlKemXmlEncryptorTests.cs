@@ -20,11 +20,11 @@ public class MlKemXmlEncryptorTests : IDisposable
             Directory.Delete(_testDir, recursive: true);
     }
 
-    private MlKemDataProtectionOptions CreateOptions(MLKemAlgorithm? algorithm = null)
+    private MlKemDataProtectionOptions CreateOptions(string? algorithm = null)
     {
         return new MlKemDataProtectionOptions
         {
-            Algorithm = algorithm ?? MLKemAlgorithm.MLKem768,
+            Algorithm = algorithm ?? MlKemAlgorithms.MlKem768,
             KeyStoreDirectory = _testDir,
             KeyStorePassword = "test-password-xyz"
         };
@@ -78,8 +78,7 @@ public class MlKemXmlEncryptorTests : IDisposable
     public void EncryptDecrypt_RoundTrip_AllAlgorithms(string algName)
     {
 
-        var algorithm = MlKemAlgorithms.ToMLKemAlgorithm(algName);
-        var options = CreateOptions(algorithm);
+        var options = CreateOptions(algName);
         var encryptor = new MlKemXmlEncryptor(options);
 
         var original = new XElement("root",

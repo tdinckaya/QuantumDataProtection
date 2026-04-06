@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace QuantumDataProtection;
 
 /// <summary>
@@ -22,26 +20,41 @@ public static class MlKemAlgorithms
     };
 
     /// <summary>
-    /// Maps an algorithm string to its <see cref="MLKemAlgorithm"/> instance.
+    /// Validates that the algorithm string is supported.
     /// </summary>
-    internal static MLKemAlgorithm ToMLKemAlgorithm(string algorithm) => algorithm.ToUpperInvariant() switch
+    internal static void Validate(string algorithm)
     {
-        "ML-KEM-512" => MLKemAlgorithm.MLKem512,
-        "ML-KEM-768" => MLKemAlgorithm.MLKem768,
-        "ML-KEM-1024" => MLKemAlgorithm.MLKem1024,
-        _ => throw new ArgumentException($"Unsupported ML-KEM algorithm: {algorithm}", nameof(algorithm))
-    };
+        if (!All.Contains(algorithm))
+            throw new ArgumentException(
+                $"Unsupported ML-KEM algorithm: '{algorithm}'. Supported: {string.Join(", ", All)}",
+                nameof(algorithm));
+    }
+
+#if NET10_0_OR_GREATER
+    /// <summary>
+    /// Maps an algorithm string to its <see cref="System.Security.Cryptography.MLKemAlgorithm"/> instance.
+    /// Only available on .NET 10+.
+    /// </summary>
+    internal static System.Security.Cryptography.MLKemAlgorithm ToMLKemAlgorithm(string algorithm) =>
+        algorithm.ToUpperInvariant() switch
+        {
+            "ML-KEM-512" => System.Security.Cryptography.MLKemAlgorithm.MLKem512,
+            "ML-KEM-768" => System.Security.Cryptography.MLKemAlgorithm.MLKem768,
+            "ML-KEM-1024" => System.Security.Cryptography.MLKemAlgorithm.MLKem1024,
+            _ => throw new ArgumentException($"Unsupported ML-KEM algorithm: {algorithm}", nameof(algorithm))
+        };
 
     /// <summary>
-    /// Returns the string identifier for a given <see cref="MLKemAlgorithm"/>.
+    /// Returns the string identifier for a given <see cref="System.Security.Cryptography.MLKemAlgorithm"/>.
     /// </summary>
-    internal static string ToAlgorithmString(MLKemAlgorithm algorithm)
+    internal static string ToAlgorithmString(System.Security.Cryptography.MLKemAlgorithm algorithm)
     {
-        if (algorithm == MLKemAlgorithm.MLKem512) return MlKem512;
-        if (algorithm == MLKemAlgorithm.MLKem768) return MlKem768;
-        if (algorithm == MLKemAlgorithm.MLKem1024) return MlKem1024;
+        if (algorithm == System.Security.Cryptography.MLKemAlgorithm.MLKem512) return MlKem512;
+        if (algorithm == System.Security.Cryptography.MLKemAlgorithm.MLKem768) return MlKem768;
+        if (algorithm == System.Security.Cryptography.MLKemAlgorithm.MLKem1024) return MlKem1024;
         throw new ArgumentException($"Unknown MLKemAlgorithm: {algorithm.Name}", nameof(algorithm));
     }
+#endif
 
     /// <summary>
     /// Returns the string identifier for a BouncyCastle MLKemParameters instance.

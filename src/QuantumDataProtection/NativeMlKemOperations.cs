@@ -1,3 +1,4 @@
+#if NET10_0_OR_GREATER
 #pragma warning disable SYSLIB5006
 
 using System.Security.Cryptography;
@@ -47,21 +48,6 @@ internal sealed class NativeMlKemOperations : IMlKemKeyOperations
         return new NativeMlKemOperations(mlKem, ownsKey: true);
     }
 
-    public static NativeMlKemOperations FromEncryptedPkcs8(string password, byte[] encryptedKey)
-    {
-        var (rawKey, algName) = KeyEncryptionHelper.Decrypt(password, encryptedKey);
-        try
-        {
-            var algorithm = MlKemAlgorithms.ToMLKemAlgorithm(algName);
-            var mlKem = MLKem.ImportDecapsulationKey(algorithm, rawKey);
-            return new NativeMlKemOperations(mlKem, ownsKey: true);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(rawKey);
-        }
-    }
-
     public (byte[] SharedSecret, byte[] Ciphertext) Encapsulate()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -97,7 +83,6 @@ internal sealed class NativeMlKemOperations : IMlKemKeyOperations
         if (!_hasDecapsulationKey)
             throw new InvalidOperationException("No decapsulation key available.");
 
-        // Use cross-platform encryption helper for consistency with BouncyCastle
         var rawKey = _mlKem.ExportDecapsulationKey();
         var algName = MlKemAlgorithms.ToAlgorithmString(_mlKem.Algorithm);
         try
@@ -123,3 +108,4 @@ internal sealed class NativeMlKemOperations : IMlKemKeyOperations
         catch (CryptographicException) { return false; }
     }
 }
+#endif

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace QuantumDataProtection;
 
 /// <summary>
@@ -11,8 +9,9 @@ public sealed class MlKemDataProtectionOptions
 
     /// <summary>
     /// The ML-KEM algorithm variant. Defaults to ML-KEM-768 (recommended).
+    /// Use <see cref="MlKemAlgorithms"/> constants.
     /// </summary>
-    public MLKemAlgorithm Algorithm { get; set; } = MLKemAlgorithm.MLKem768;
+    public string Algorithm { get; set; } = MlKemAlgorithms.MlKem768;
 
     /// <summary>
     /// Custom <see cref="IKeyStore"/> for storing decapsulation keys.
@@ -27,42 +26,23 @@ public sealed class MlKemDataProtectionOptions
     public string? KeyStoreDirectory { get; set; }
 
     /// <summary>
-    /// Password for encrypting/decrypting decapsulation keys stored via <see cref="FileKeyStore"/>
-    /// and for PKCS#8 private key encryption at rest.
+    /// Password for encrypting/decrypting decapsulation keys.
     /// <para>
-    /// <b>Required.</b> This password protects the ML-KEM decapsulation keys on disk.
-    /// Do not hardcode — load from a secret manager or environment variable.
+    /// <b>Required.</b> Do not hardcode — load from a secret manager or environment variable.
     /// </para>
     /// </summary>
     public string? KeyStorePassword { get; set; }
 
     /// <summary>
-    /// When <c>true</c> (default), existing RSA/DPAPI-wrapped keys can still be decrypted
-    /// using a fallback decryptor. New keys are always wrapped with ML-KEM.
-    /// <para>
-    /// Set to <c>false</c> only after all legacy keys have expired or been re-encrypted.
-    /// </para>
+    /// When <c>true</c> (default), existing RSA/DPAPI-wrapped keys can still be decrypted.
     /// </summary>
     public bool EnableLegacyKeyDecryption { get; set; } = true;
 
     /// <summary>
-    /// The legacy <see cref="Microsoft.AspNetCore.DataProtection.XmlEncryption.IXmlDecryptor"/>
-    /// type to use for decrypting pre-existing RSA/DPAPI-wrapped keys.
-    /// <para>
-    /// Only used when <see cref="EnableLegacyKeyDecryption"/> is <c>true</c>.
-    /// If null, the <see cref="HybridXmlDecryptor"/> will attempt to resolve any
-    /// previously registered <c>IXmlDecryptor</c> from the service provider.
-    /// </para>
-    /// <para>
-    /// Common values: <c>typeof(CertificateXmlDecryptor)</c>, <c>typeof(DpapiNGXmlDecryptor)</c>.
-    /// </para>
+    /// The legacy decryptor type for pre-existing RSA/DPAPI-wrapped keys.
     /// </summary>
     public Type? LegacyDecryptorType { get; set; }
 
-    /// <summary>
-    /// Resolves the <see cref="IKeyStore"/> from the configured options.
-    /// Returns a cached instance on subsequent calls.
-    /// </summary>
     internal IKeyStore ResolveKeyStore()
     {
         if (_resolvedKeyStore is not null)
@@ -82,14 +62,11 @@ public sealed class MlKemDataProtectionOptions
         return _resolvedKeyStore;
     }
 
-    /// <summary>
-    /// Returns the password used for PKCS#8 encryption of decapsulation keys.
-    /// </summary>
     internal string ResolvePkcs8Password()
     {
         if (string.IsNullOrEmpty(KeyStorePassword))
             throw new InvalidOperationException(
-                "KeyStorePassword is required for PKCS#8 encryption of decapsulation keys.");
+                "KeyStorePassword is required for encryption of decapsulation keys.");
 
         return KeyStorePassword;
     }

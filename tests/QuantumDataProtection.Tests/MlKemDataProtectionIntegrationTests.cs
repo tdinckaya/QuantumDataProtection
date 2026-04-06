@@ -31,7 +31,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
             .PersistKeysToFileSystem(new DirectoryInfo(_keyDir))
             .ProtectKeysWithMlKem(options =>
             {
-                options.Algorithm = MLKemAlgorithm.MLKem768;
+                options.Algorithm = MlKemAlgorithms.MlKem768;
                 options.KeyStoreDirectory = Path.Combine(_testDir, "kem-keys");
                 options.KeyStorePassword = "integration-test-password";
             });
@@ -56,7 +56,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
             .PersistKeysToFileSystem(new DirectoryInfo(_keyDir))
             .ProtectKeysWithMlKem(options =>
             {
-                options.Algorithm = MLKemAlgorithm.MLKem768;
+                options.Algorithm = MlKemAlgorithms.MlKem768;
                 options.KeyStoreDirectory = Path.Combine(_testDir, "kem-keys");
                 options.KeyStorePassword = "integration-test-password";
             });
@@ -85,7 +85,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
             .PersistKeysToFileSystem(new DirectoryInfo(freshKeyDir))
             .ProtectKeysWithMlKem(options =>
             {
-                options.Algorithm = MLKemAlgorithm.MLKem768;
+                options.Algorithm = MlKemAlgorithms.MlKem768;
                 options.KeyStoreDirectory = kemKeyDir;
                 options.KeyStorePassword = "check-password";
             });

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Xunit;
 
 namespace QuantumDataProtection.Tests;
@@ -11,8 +10,7 @@ public class MlKemKeyTests
     [InlineData("ML-KEM-1024")]
     public void Generate_AllVariants_CreatesValidKey(string algName)
     {
-        var algorithm = MlKemAlgorithms.ToMLKemAlgorithm(algName);
-        using var key = MlKemKey.Generate(algorithm);
+        using var key = MlKemKey.Generate(algName);
 
         Assert.NotNull(key);
         Assert.True(key.HasDecapsulationKey);
@@ -30,7 +28,7 @@ public class MlKemKeyTests
     [Fact]
     public void EncapsulateAndDecapsulate_RoundTrip()
     {
-        using var key = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
+        using var key = MlKemKey.Generate(MlKemAlgorithms.MlKem768);
 
         var (sharedSecret, ciphertext) = key.Encapsulate();
         var decapsulated = key.Decapsulate(ciphertext);
@@ -42,10 +40,10 @@ public class MlKemKeyTests
     [Fact]
     public void ExportEncapsulationKey_RoundTrip()
     {
-        using var original = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
+        using var original = MlKemKey.Generate(MlKemAlgorithms.MlKem768);
         var encapKeyBytes = original.ExportEncapsulationKey();
 
-        using var publicOnly = MlKemKey.FromEncapsulationKey(encapKeyBytes, MLKemAlgorithm.MLKem768);
+        using var publicOnly = MlKemKey.FromEncapsulationKey(encapKeyBytes, MlKemAlgorithms.MlKem768);
 
         Assert.False(publicOnly.HasDecapsulationKey);
         Assert.Equal(original.ExportEncapsulationKey(), publicOnly.ExportEncapsulationKey());
@@ -54,11 +52,11 @@ public class MlKemKeyTests
     [Fact]
     public void ExportDecapsulationKey_RoundTrip()
     {
-        using var original = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
+        using var original = MlKemKey.Generate(MlKemAlgorithms.MlKem768);
         var (sharedSecret, ciphertext) = original.Encapsulate();
 
         var decapKeyBytes = original.ExportDecapsulationKey();
-        using var restored = MlKemKey.FromDecapsulationKey(decapKeyBytes, MLKemAlgorithm.MLKem768);
+        using var restored = MlKemKey.FromDecapsulationKey(decapKeyBytes, MlKemAlgorithms.MlKem768);
 
         var decapsulated = restored.Decapsulate(ciphertext);
         Assert.Equal(sharedSecret, decapsulated);
@@ -67,9 +65,9 @@ public class MlKemKeyTests
     [Fact]
     public void HasDecapsulationKey_WhenEncapsulationOnly_ReturnsFalse()
     {
-        using var full = MlKemKey.Generate(MLKemAlgorithm.MLKem512);
+        using var full = MlKemKey.Generate(MlKemAlgorithms.MlKem512);
         var encapBytes = full.ExportEncapsulationKey();
-        using var pubOnly = MlKemKey.FromEncapsulationKey(encapBytes, MLKemAlgorithm.MLKem512);
+        using var pubOnly = MlKemKey.FromEncapsulationKey(encapBytes, MlKemAlgorithms.MlKem512);
 
         Assert.False(pubOnly.HasDecapsulationKey);
         Assert.Throws<InvalidOperationException>(() => pubOnly.ExportDecapsulationKey());
@@ -96,7 +94,7 @@ public class MlKemKeyTests
     [Fact]
     public void DoubleDispose_DoesNotThrow()
     {
-        var key = MlKemKey.Generate(MLKemAlgorithm.MLKem512);
+        var key = MlKemKey.Generate(MlKemAlgorithms.MlKem512);
         key.Dispose();
         key.Dispose(); // Should not throw
     }

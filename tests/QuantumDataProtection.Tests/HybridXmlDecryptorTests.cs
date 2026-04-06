@@ -25,7 +25,7 @@ public class HybridXmlDecryptorTests : IDisposable
     {
         return new MlKemDataProtectionOptions
         {
-            Algorithm = MLKemAlgorithm.MLKem768,
+            Algorithm = MlKemAlgorithms.MlKem768,
             KeyStoreDirectory = _testDir,
             KeyStorePassword = "hybrid-test-password",
             EnableLegacyKeyDecryption = true,
@@ -100,7 +100,7 @@ public class HybridXmlDecryptorTests : IDisposable
 
         var options = new MlKemDataProtectionOptions
         {
-            Algorithm = MLKemAlgorithm.MLKem768,
+            Algorithm = MlKemAlgorithms.MlKem768,
             KeyStoreDirectory = _testDir,
             KeyStorePassword = "test",
             EnableLegacyKeyDecryption = false

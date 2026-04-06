@@ -51,9 +51,7 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
                 using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
                 aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-                var encryptedDecapKey = kemKey.ExportEncryptedPkcs8PrivateKey(
-                    _pkcs8Password,
-                    new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100_000));
+                var encryptedDecapKey = kemKey.ExportEncryptedKey(_pkcs8Password, _options.Algorithm);
 
                 _keyStore.SavePrivateKeyAsync(kemKey.KeyId, encryptedDecapKey)
                     .GetAwaiter().GetResult();
