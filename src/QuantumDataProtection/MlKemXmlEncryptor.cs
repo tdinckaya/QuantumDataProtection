@@ -59,10 +59,8 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
                 _logger?.LogDebug("XML key encrypted with ML-KEM. KeyId={KeyId}, Provider={Provider}",
                     kemKey.KeyId, kemKey.ProviderName);
 
-                var algName = MlKemAlgorithms.ToAlgorithmString(_options.Algorithm);
-
                 var encryptedElement = new XElement("mlKemEncryptedKey",
-                    new XElement("algorithm", algName),
+                    new XElement("algorithm", _options.Algorithm),
                     new XElement("keyId", kemKey.KeyId),
                     new XElement("kemCiphertext", Convert.ToBase64String(kemCiphertext)),
                     new XElement("nonce", Convert.ToBase64String(nonce)),
