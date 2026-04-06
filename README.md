@@ -39,6 +39,28 @@ builder.Services.AddDataProtection()
 
 That's it. Cookies, sessions, anti-forgery tokens — now quantum-resistant.
 
+### Migrating from RSA/Certificate Protection
+
+Already using `ProtectKeysWithCertificate()` or DPAPI? No problem — existing keys remain readable:
+
+```csharp
+builder.Services.AddDataProtection()
+    .ProtectKeysWithMlKem(options =>
+    {
+        options.Algorithm = MLKemAlgorithm.MLKem768;
+        options.KeyStoreDirectory = "/var/keys";
+        options.KeyStorePassword = config["KeyPassword"];
+
+        // Tell the hybrid decryptor how to read old keys
+        options.LegacyDecryptorType = typeof(CertificateXmlDecryptor);
+    });
+```
+
+**What happens:**
+- New keys → ML-KEM encrypted (quantum-safe)
+- Old keys → still readable via legacy decryptor (no user logout)
+- Once all old keys expire → set `EnableLegacyKeyDecryption = false`
+
 ---
 
 ## How It Works
@@ -138,7 +160,8 @@ options.KeyStore = new AzureKeyVaultKeyStore(vaultUri);
 |-------|-------------|
 | `MlKemKey` | ML-KEM key wrapper with Generate/Encapsulate/Decapsulate |
 | `MlKemXmlEncryptor` | `IXmlEncryptor` — ML-KEM + AES-256-GCM encryption |
-| `MlKemXmlDecryptor` | `IXmlDecryptor` — decryption counterpart |
+| `MlKemXmlDecryptor` | `IXmlDecryptor` — ML-KEM decryption |
+| `HybridXmlDecryptor` | `IXmlDecryptor` — routes ML-KEM and legacy keys to correct decryptor |
 | `MlKemDataProtectionOptions` | Configuration (algorithm, key store) |
 | `IKeyStore` | Key persistence abstraction |
 | `FileKeyStore` | File-based encrypted key storage |

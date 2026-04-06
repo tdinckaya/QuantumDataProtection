@@ -39,6 +39,28 @@ builder.Services.AddDataProtection()
 
 Bu kadar. Cookie'ler, session'lar, anti-forgery token'lar — artik kuantum-dayanikli.
 
+### RSA/Sertifika Korumasindan Goc
+
+Zaten `ProtectKeysWithCertificate()` veya DPAPI kullaniyorsaniz sorun yok — mevcut key'ler okunabilir kalir:
+
+```csharp
+builder.Services.AddDataProtection()
+    .ProtectKeysWithMlKem(options =>
+    {
+        options.Algorithm = MLKemAlgorithm.MLKem768;
+        options.KeyStoreDirectory = "/var/keys";
+        options.KeyStorePassword = config["KeyPassword"];
+
+        // Eski key'leri nasil okuyacagini belirt
+        options.LegacyDecryptorType = typeof(CertificateXmlDecryptor);
+    });
+```
+
+**Ne olur:**
+- Yeni key'ler → ML-KEM ile sifrelenir (kuantum-guvenli)
+- Eski key'ler → legacy decryptor ile okunur (kullanici logout olmaz)
+- Tum eski key'ler expire oldugunda → `EnableLegacyKeyDecryption = false` yap
+
 ---
 
 ## Nasil Calisir?
@@ -138,7 +160,8 @@ options.KeyStore = new AzureKeyVaultKeyStore(vaultUri);
 |-------|---------|
 | `MlKemKey` | Generate/Encapsulate/Decapsulate ile ML-KEM anahtar wrapper |
 | `MlKemXmlEncryptor` | `IXmlEncryptor` — ML-KEM + AES-256-GCM sifreleme |
-| `MlKemXmlDecryptor` | `IXmlDecryptor` — cozme karsiligi |
+| `MlKemXmlDecryptor` | `IXmlDecryptor` — ML-KEM cozme |
+| `HybridXmlDecryptor` | `IXmlDecryptor` — ML-KEM ve legacy key'leri dogru decryptor'a yonlendirir |
 | `MlKemDataProtectionOptions` | Yapilandirma (algoritma, anahtar deposu) |
 | `IKeyStore` | Anahtar kalicilik soyutlamasi |
 | `FileKeyStore` | Dosya tabanli sifreli anahtar saklama |

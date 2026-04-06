@@ -37,6 +37,29 @@ public sealed class MlKemDataProtectionOptions
     public string? KeyStorePassword { get; set; }
 
     /// <summary>
+    /// When <c>true</c> (default), existing RSA/DPAPI-wrapped keys can still be decrypted
+    /// using a fallback decryptor. New keys are always wrapped with ML-KEM.
+    /// <para>
+    /// Set to <c>false</c> only after all legacy keys have expired or been re-encrypted.
+    /// </para>
+    /// </summary>
+    public bool EnableLegacyKeyDecryption { get; set; } = true;
+
+    /// <summary>
+    /// The legacy <see cref="Microsoft.AspNetCore.DataProtection.XmlEncryption.IXmlDecryptor"/>
+    /// type to use for decrypting pre-existing RSA/DPAPI-wrapped keys.
+    /// <para>
+    /// Only used when <see cref="EnableLegacyKeyDecryption"/> is <c>true</c>.
+    /// If null, the <see cref="HybridXmlDecryptor"/> will attempt to resolve any
+    /// previously registered <c>IXmlDecryptor</c> from the service provider.
+    /// </para>
+    /// <para>
+    /// Common values: <c>typeof(CertificateXmlDecryptor)</c>, <c>typeof(DpapiNGXmlDecryptor)</c>.
+    /// </para>
+    /// </summary>
+    public Type? LegacyDecryptorType { get; set; }
+
+    /// <summary>
     /// Resolves the <see cref="IKeyStore"/> from the configured options.
     /// Returns a cached instance on subsequent calls.
     /// </summary>
