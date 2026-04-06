@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Allow building older TFMs with newer SDK when exact ref packs aren't available -->
+    <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
+  </PropertyGroup>
+</Project>
