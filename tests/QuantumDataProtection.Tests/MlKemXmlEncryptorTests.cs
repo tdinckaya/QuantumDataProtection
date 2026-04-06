@@ -131,4 +131,105 @@ public class MlKemXmlEncryptorTests : IDisposable
 
         Assert.Equal(original.ToString(), decrypted.ToString());
     }
+
+    [SkippableFact]
+    public void Decrypt_MissingKeyInStore_ThrowsCryptographicException()
+    {
+        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
+
+        var options = CreateOptions();
+        var encryptor = new MlKemXmlEncryptor(options);
+        var original = new XElement("root", "test");
+
+        var encrypted = encryptor.Encrypt(original);
+
+        // Delete the stored key to simulate missing key
+        var keyId = encrypted.EncryptedElement.Element("keyId")!.Value;
+        var store = options.ResolveKeyStore();
+        store.DeleteKeyAsync(keyId).GetAwaiter().GetResult();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(options);
+        using var sp = services.BuildServiceProvider();
+        var decryptor = new MlKemXmlDecryptor(sp);
+
+        Assert.Throws<CryptographicException>(() => decryptor.Decrypt(encrypted.EncryptedElement));
+    }
+
+    [SkippableFact]
+    public void Decrypt_CorruptedXml_MissingElement_ThrowsCryptographicException()
+    {
+        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
+
+        var options = CreateOptions();
+        var services = new ServiceCollection();
+        services.AddSingleton(options);
+        using var sp = services.BuildServiceProvider();
+        var decryptor = new MlKemXmlDecryptor(sp);
+
+        var corruptedXml = new XElement("mlKemEncryptedKey",
+            new XElement("algorithm", "ML-KEM-768"));
+        // Missing keyId, kemCiphertext, nonce, ciphertext, tag
+
+        Assert.Throws<CryptographicException>(() => decryptor.Decrypt(corruptedXml));
+    }
+
+    [SkippableFact]
+    public void Decrypt_UnsupportedAlgorithm_ThrowsCryptographicException()
+    {
+        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
+
+        var options = CreateOptions();
+        var services = new ServiceCollection();
+        services.AddSingleton(options);
+        using var sp = services.BuildServiceProvider();
+        var decryptor = new MlKemXmlDecryptor(sp);
+
+        var badAlgXml = new XElement("mlKemEncryptedKey",
+            new XElement("algorithm", "RSA-2048"),
+            new XElement("keyId", "fake"),
+            new XElement("kemCiphertext", Convert.ToBase64String(new byte[32])),
+            new XElement("nonce", Convert.ToBase64String(new byte[12])),
+            new XElement("ciphertext", Convert.ToBase64String(new byte[16])),
+            new XElement("tag", Convert.ToBase64String(new byte[16])));
+
+        var ex = Assert.Throws<CryptographicException>(() => decryptor.Decrypt(badAlgXml));
+        Assert.Contains("Unsupported ML-KEM algorithm", ex.Message);
+    }
+
+    [Fact]
+    public void Options_MissingPasswordAndStore_ThrowsInvalidOperation()
+    {
+        var options = new MlKemDataProtectionOptions();
+        // No KeyStore, no KeyStoreDirectory, no KeyStorePassword
+
+        Assert.Throws<InvalidOperationException>(() => options.ResolveKeyStore());
+    }
+
+    [Fact]
+    public void Options_MissingPassword_ThrowsInvalidOperation()
+    {
+        var options = new MlKemDataProtectionOptions
+        {
+            KeyStoreDirectory = "/tmp/test"
+            // KeyStorePassword is null
+        };
+
+        Assert.Throws<InvalidOperationException>(() => options.ResolvePkcs8Password());
+    }
+
+    [Fact]
+    public void Options_ResolveKeyStore_ReturnsCachedInstance()
+    {
+        var options = new MlKemDataProtectionOptions
+        {
+            KeyStoreDirectory = Path.Combine(_testDir, "cache-test"),
+            KeyStorePassword = "test"
+        };
+
+        var store1 = options.ResolveKeyStore();
+        var store2 = options.ResolveKeyStore();
+
+        Assert.Same(store1, store2);
+    }
 }

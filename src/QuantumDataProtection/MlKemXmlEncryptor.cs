@@ -17,6 +17,7 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
 {
     private readonly MlKemDataProtectionOptions _options;
     private readonly IKeyStore _keyStore;
+    private readonly string _pkcs8Password;
 
     /// <summary>
     /// Initializes a new <see cref="MlKemXmlEncryptor"/>.
@@ -25,6 +26,7 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _keyStore = options.ResolveKeyStore();
+        _pkcs8Password = options.ResolvePkcs8Password();
     }
 
     /// <summary>
@@ -34,46 +36,53 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
     {
         var plaintext = System.Text.Encoding.UTF8.GetBytes(plaintextElement.ToString());
 
-        // Generate a fresh ML-KEM keypair for this XML key
-        using var kemKey = MlKemKey.Generate(_options.Algorithm);
-
-        // Encapsulate → shared secret + ciphertext
-        var (sharedSecret, kemCiphertext) = kemKey.Encapsulate();
-
         try
         {
-            // AES-256-GCM encrypt the XML
-            var nonce = new byte[12]; // 96-bit nonce
-            RandomNumberGenerator.Fill(nonce);
+            // Generate a fresh ML-KEM keypair for this XML key
+            using var kemKey = MlKemKey.Generate(_options.Algorithm);
 
-            var ciphertext = new byte[plaintext.Length];
-            var tag = new byte[16]; // 128-bit tag
+            // Encapsulate → shared secret + ciphertext
+            var (sharedSecret, kemCiphertext) = kemKey.Encapsulate();
 
-            using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
-            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+            try
+            {
+                // AES-256-GCM encrypt the XML
+                var nonce = new byte[12]; // 96-bit nonce
+                RandomNumberGenerator.Fill(nonce);
 
-            // Save decapsulation key to store
-            var encryptedDecapKey = kemKey.MlKem.ExportEncryptedPkcs8PrivateKey(
-                "quantum-dp-key",
-                new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100_000));
+                var ciphertext = new byte[plaintext.Length];
+                var tag = new byte[16]; // 128-bit tag
 
-            _keyStore.SavePrivateKeyAsync(kemKey.KeyId, encryptedDecapKey)
-                .GetAwaiter().GetResult();
+                using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
+                aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-            // Build output XML
-            var encryptedElement = new XElement("mlKemEncryptedKey",
-                new XElement("algorithm", MlKemAlgorithms.ToAlgorithmString(kemKey.Algorithm)),
-                new XElement("keyId", kemKey.KeyId),
-                new XElement("kemCiphertext", Convert.ToBase64String(kemCiphertext)),
-                new XElement("nonce", Convert.ToBase64String(nonce)),
-                new XElement("ciphertext", Convert.ToBase64String(ciphertext)),
-                new XElement("tag", Convert.ToBase64String(tag)));
+                // Save decapsulation key to store (encrypted with user's password)
+                var encryptedDecapKey = kemKey.MlKem.ExportEncryptedPkcs8PrivateKey(
+                    _pkcs8Password,
+                    new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100_000));
 
-            return new EncryptedXmlInfo(encryptedElement, typeof(MlKemXmlDecryptor));
+                _keyStore.SavePrivateKeyAsync(kemKey.KeyId, encryptedDecapKey)
+                    .GetAwaiter().GetResult();
+
+                // Build output XML
+                var encryptedElement = new XElement("mlKemEncryptedKey",
+                    new XElement("algorithm", MlKemAlgorithms.ToAlgorithmString(kemKey.Algorithm)),
+                    new XElement("keyId", kemKey.KeyId),
+                    new XElement("kemCiphertext", Convert.ToBase64String(kemCiphertext)),
+                    new XElement("nonce", Convert.ToBase64String(nonce)),
+                    new XElement("ciphertext", Convert.ToBase64String(ciphertext)),
+                    new XElement("tag", Convert.ToBase64String(tag)));
+
+                return new EncryptedXmlInfo(encryptedElement, typeof(MlKemXmlDecryptor));
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(sharedSecret);
+            }
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(sharedSecret);
+            CryptographicOperations.ZeroMemory(plaintext);
         }
     }
 }

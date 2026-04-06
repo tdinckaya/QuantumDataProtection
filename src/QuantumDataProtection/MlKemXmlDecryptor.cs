@@ -12,6 +12,7 @@ namespace QuantumDataProtection;
 public sealed class MlKemXmlDecryptor : IXmlDecryptor
 {
     private readonly IKeyStore _keyStore;
+    private readonly string _pkcs8Password;
 
     /// <summary>
     /// Initializes a new <see cref="MlKemXmlDecryptor"/>.
@@ -20,6 +21,7 @@ public sealed class MlKemXmlDecryptor : IXmlDecryptor
     {
         var options = services.GetRequiredService<MlKemDataProtectionOptions>();
         _keyStore = options.ResolveKeyStore();
+        _pkcs8Password = options.ResolvePkcs8Password();
     }
 
     /// <summary>
@@ -45,13 +47,19 @@ public sealed class MlKemXmlDecryptor : IXmlDecryptor
             encryptedElement.Element("tag")?.Value
             ?? throw new CryptographicException("Missing 'tag' element."));
 
+        // Validate algorithm
+        if (!MlKemAlgorithms.All.Contains(algorithmStr))
+            throw new CryptographicException(
+                $"Unsupported ML-KEM algorithm '{algorithmStr}'. " +
+                $"Supported: {string.Join(", ", MlKemAlgorithms.All)}");
+
         // Load decapsulation key from store
         var encryptedDecapKey = _keyStore.LoadPrivateKeyAsync(keyId)
             .GetAwaiter().GetResult()
             ?? throw new CryptographicException($"Decapsulation key '{keyId}' not found in key store.");
 
-        // Import the decapsulation key
-        using var mlKem = MLKem.ImportEncryptedPkcs8PrivateKey("quantum-dp-key", encryptedDecapKey);
+        // Import the decapsulation key (using user's password, not hardcoded)
+        using var mlKem = MLKem.ImportEncryptedPkcs8PrivateKey(_pkcs8Password, encryptedDecapKey);
 
         // Decapsulate → shared secret
         var sharedSecret = mlKem.Decapsulate(kemCiphertext);
@@ -60,11 +68,19 @@ public sealed class MlKemXmlDecryptor : IXmlDecryptor
         {
             // AES-256-GCM decrypt
             var plaintext = new byte[ciphertext.Length];
-            using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
-            aes.Decrypt(nonce, ciphertext, tag, plaintext);
 
-            var xml = System.Text.Encoding.UTF8.GetString(plaintext);
-            return XElement.Parse(xml);
+            try
+            {
+                using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
+                aes.Decrypt(nonce, ciphertext, tag, plaintext);
+
+                var xml = System.Text.Encoding.UTF8.GetString(plaintext);
+                return XElement.Parse(xml);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(plaintext);
+            }
         }
         finally
         {

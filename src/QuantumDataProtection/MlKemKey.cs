@@ -30,7 +30,7 @@ public sealed class MlKemKey : IDisposable
     }
 
     /// <summary>The underlying <see cref="MLKem"/> instance.</summary>
-    public MLKem MlKem { get; }
+    internal MLKem MlKem { get; }
 
     /// <summary>The ML-KEM algorithm variant.</summary>
     public MLKemAlgorithm Algorithm { get; }

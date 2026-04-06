@@ -123,4 +123,25 @@ public class MlKemKeyTests
         var encapKey = mlKem.ExportEncapsulationKey();
         Assert.NotNull(encapKey);
     }
+
+    [SkippableFact]
+    public void DoubleDispose_DoesNotThrow()
+    {
+        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
+
+        var key = MlKemKey.Generate(MLKemAlgorithm.MLKem512);
+        key.Dispose();
+        key.Dispose(); // Should not throw
+    }
+
+    [SkippableFact]
+    public void Encapsulate_AfterDispose_ThrowsObjectDisposed()
+    {
+        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
+
+        var key = MlKemKey.Generate();
+        key.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => key.Encapsulate());
+    }
 }

@@ -7,6 +7,8 @@ namespace QuantumDataProtection;
 /// </summary>
 public sealed class MlKemDataProtectionOptions
 {
+    private IKeyStore? _resolvedKeyStore;
+
     /// <summary>
     /// The ML-KEM algorithm variant. Defaults to ML-KEM-768 (recommended).
     /// </summary>
@@ -25,23 +27,47 @@ public sealed class MlKemDataProtectionOptions
     public string? KeyStoreDirectory { get; set; }
 
     /// <summary>
-    /// Password for the built-in <see cref="FileKeyStore"/>.
-    /// Used only if <see cref="KeyStore"/> is null.
+    /// Password for encrypting/decrypting decapsulation keys stored via <see cref="FileKeyStore"/>
+    /// and for PKCS#8 private key encryption at rest.
+    /// <para>
+    /// <b>Required.</b> This password protects the ML-KEM decapsulation keys on disk.
+    /// Do not hardcode — load from a secret manager or environment variable.
+    /// </para>
     /// </summary>
     public string? KeyStorePassword { get; set; }
 
     /// <summary>
     /// Resolves the <see cref="IKeyStore"/> from the configured options.
+    /// Returns a cached instance on subsequent calls.
     /// </summary>
     internal IKeyStore ResolveKeyStore()
     {
+        if (_resolvedKeyStore is not null)
+            return _resolvedKeyStore;
+
         if (KeyStore is not null)
-            return KeyStore;
+        {
+            _resolvedKeyStore = KeyStore;
+            return _resolvedKeyStore;
+        }
 
         if (string.IsNullOrEmpty(KeyStoreDirectory) || string.IsNullOrEmpty(KeyStorePassword))
             throw new InvalidOperationException(
                 "Either set KeyStore directly, or provide both KeyStoreDirectory and KeyStorePassword.");
 
-        return new FileKeyStore(KeyStoreDirectory, KeyStorePassword);
+        _resolvedKeyStore = new FileKeyStore(KeyStoreDirectory, KeyStorePassword);
+        return _resolvedKeyStore;
+    }
+
+    /// <summary>
+    /// Returns the password used for PKCS#8 encryption of decapsulation keys.
+    /// </summary>
+    internal string ResolvePkcs8Password()
+    {
+        if (string.IsNullOrEmpty(KeyStorePassword))
+            throw new InvalidOperationException(
+                "KeyStorePassword is required for PKCS#8 encryption of decapsulation keys.");
+
+        return KeyStorePassword;
     }
 }
