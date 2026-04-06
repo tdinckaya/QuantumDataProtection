@@ -20,7 +20,7 @@ ASP.NET Core Data Protection encrypts cookies, session state, and anti-forgery t
 
 **AES is fine. The RSA envelope is the problem. We replace it with ML-KEM.**
 
-No other NuGet package, framework library, or open-source project does this — not for .NET, not for Java Spring, not for Python Django. This is a greenfield solution.
+As of this writing, no other NuGet package provides ML-KEM-based key wrapping for ASP.NET Core Data Protection. Microsoft ships the raw ML-KEM primitives in .NET 10, but not the Data Protection integration — this package fills that gap.
 
 ---
 
@@ -78,22 +78,29 @@ Day 91:  Set EnableLegacyKeyDecryption = false
 ```
                     Data Protection Pipeline
 
-    [Master Key XML]
-           |
-    +------+------+
-    |  DEFAULT    |     RSA key wrapping (quantum-VULNERABLE)
-    |  (ASP.NET)  |     AES-256 payload encryption (quantum-safe)
-    +------+------+
-           |
-    +------+------+
-    |  WITH THIS  |     ML-KEM key encapsulation (quantum-SAFE)
-    |  PACKAGE    |     AES-256-GCM payload encryption (quantum-safe)
-    +-------------+
+    [Application Payload: cookies, sessions, anti-forgery tokens]
+                  |
+                  | Encrypted by ASP.NET Core Data Protection
+                  | (AES-based, quantum-safe — unchanged by this package)
+                  ↓
+    [Master XML Key] ← must be protected at rest
+                  |
+        +---------+---------+
+        |  DEFAULT           |   RSA key wrapping
+        |  (ASP.NET Core)    |   (quantum-VULNERABLE)
+        +---------+---------+
+                  |
+        +---------+---------+
+        |  WITH THIS PACKAGE |   ML-KEM key encapsulation (quantum-SAFE)
+        |                    |   XML key wrapped with AES-256-GCM
+        +--------------------+   using shared secret from ML-KEM
 ```
+
+**What this package changes:** only the *key wrapping* layer — how the Data Protection master key is protected at rest. The application payload encryption (cookies, sessions) remains handled by ASP.NET Core Data Protection's own AES-based pipeline, which is already quantum-safe for symmetric encryption.
 
 For each Data Protection master key:
 
-1. **Generate** fresh ML-KEM keypair (per-key isolation = forward secrecy)
+1. **Generate** fresh ML-KEM keypair (per-key isolation — each Data Protection key is cryptographically independent)
 2. **Encapsulate** shared secret + KEM ciphertext
 3. **Encrypt** XML key with AES-256-GCM using the shared secret
 4. **Store** decapsulation key encrypted in `IKeyStore`
@@ -210,7 +217,7 @@ All cryptographic operations are logged via `ILogger`:
 
 ## Security Design
 
-- **Per-key isolation:** Each Data Protection key gets its own ML-KEM keypair — forward secrecy by design
+- **Per-key isolation:** Each Data Protection key gets its own ML-KEM keypair. Compromise of one key does not cascade to others. Note: this is per-key isolation, not forward secrecy in the strict cryptographic sense — forward secrecy requires ephemeral session keys, which is a different property.
 - **Shared secret zeroing:** All shared secrets immediately cleared with `CryptographicOperations.ZeroMemory()`
 - **AES-256-GCM:** Authenticated encryption with separate nonce and tag — no ambiguity
 - **Key encryption:** Decapsulation keys stored with PBKDF2 (100K iterations) + AES-256-GCM
@@ -270,6 +277,8 @@ All cryptographic operations are logged via `ILogger`:
 - ML-KEM APIs in .NET 10 are marked `[Experimental]` (`SYSLIB5006`) — may change before GA
 - BouncyCastle adds ~2MB to the package size
 - `IXmlEncryptor.Encrypt()` is synchronous — custom `IKeyStore` implementations with network I/O should handle this carefully
+- The ML-KEM shared secret is used directly as the AES-256-GCM key without an HKDF key-derivation step. This is acceptable under authenticated encryption in the current threat model, but deviates from strict NIST SP 800-227 (draft) guidance on domain separation. HKDF-SHA256 derivation with domain-separated `info` strings is planned for a future major version (format change; will be introduced behind a version header).
+- No automatic key rotation for the underlying ML-KEM keypairs yet. ASP.NET Core's own Data Protection key rotation works normally; only the ML-KEM key-encryption-keys persist for the lifetime of the wrapped Data Protection keys. Scheduled rotation is on the roadmap.
 
 ---
 

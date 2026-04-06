@@ -20,7 +20,7 @@ ASP.NET Core Data Protection cookie'leri, session state'i ve anti-forgery token'
 
 **AES sorun degil. RSA zarfi sorun. Biz onu ML-KEM ile degistiriyoruz.**
 
-Bu cozumu sunan baska bir NuGet paketi, framework kutuphanesi veya acik kaynak proje yok — ne .NET'te, ne Java Spring'de, ne Python Django'da.
+Bu makalenin yazildigi tarih itibariyla, ASP.NET Core Data Protection icin ML-KEM tabanli anahtar sarmalama saglayan baska bir NuGet paketi bulunmuyor. Microsoft .NET 10 ile ham ML-KEM yapi taslarini sunuyor, ancak Data Protection entegrasyonunu sunmuyor — bu paket tam olarak o bosluga yaziliyor.
 
 ---
 
@@ -78,24 +78,31 @@ Gun 91:  EnableLegacyKeyDecryption = false yap
 ```
                     Data Protection Pipeline
 
-    [Master Key XML]
-           |
-    +------+------+
-    |  VARSAYILAN |     RSA key wrapping (kuantum-SAVUNMASIZ)
-    |  (ASP.NET)  |     AES-256 payload sifreleme (kuantum-guvenli)
-    +------+------+
-           |
-    +------+------+
-    |  BU PAKET   |     ML-KEM key kapsulleme (kuantum-GUVENLI)
-    |  ILE        |     AES-256-GCM payload sifreleme (kuantum-guvenli)
-    +-------------+
+    [Uygulama Payload'u: cookie, session, anti-forgery token]
+                  |
+                  | ASP.NET Core Data Protection tarafindan sifrelenir
+                  | (AES tabanli, kuantum-guvenli — bu paket degistirmez)
+                  ↓
+    [Master XML Key] ← disk uzerinde korunmasi gereken anahtar
+                  |
+        +---------+---------+
+        |  VARSAYILAN        |   RSA key wrapping
+        |  (ASP.NET Core)    |   (kuantum-SAVUNMASIZ)
+        +---------+---------+
+                  |
+        +---------+---------+
+        |  BU PAKET ILE      |   ML-KEM key kapsulleme (kuantum-GUVENLI)
+        |                    |   XML key, ML-KEM'den gelen shared secret
+        +--------------------+   ile AES-256-GCM kullanilarak sarmalanir
 ```
+
+**Bu paket neyi degistirir:** yalnizca *anahtar sarmalama* katmanini — yani Data Protection master key'inin disk uzerinde nasil korundugunu. Uygulama payload sifrelemesi (cookie, session) ASP.NET Core Data Protection'in kendi AES tabanli boru hattinda kalir; bu katman zaten simetrik sifreleme icin kuantum-guvenlidir.
 
 Her Data Protection master key icin:
 
-1. **Uret** — yeni ML-KEM keypair (key basina izolasyon = forward secrecy)
+1. **Uret** — yeni ML-KEM keypair (per-key isolation — her Data Protection anahtari kriptografik olarak birbirinden bagimsizdir)
 2. **Kapsule** — shared secret + KEM ciphertext
-3. **Sifrele** — XML key'i AES-256-GCM ile shared secret kullanarak
+3. **Sifrele** — XML key'i, shared secret'i AES-256 anahtari olarak kullanarak AES-256-GCM ile sifrele
 4. **Sakla** — decapsulation key'i sifrelenmis olarak `IKeyStore`'a
 5. **Sifirla** — shared secret'i hemen `CryptographicOperations.ZeroMemory()` ile
 
@@ -210,7 +217,7 @@ Tum kriptografik operasyonlar `ILogger` ile loglanir:
 
 ## Guvenlik Tasarimi
 
-- **Key izolasyonu:** Her Data Protection key kendi ML-KEM keypair'ine sahip — forward secrecy
+- **Per-key isolation:** Her Data Protection key kendi ML-KEM keypair'ine sahiptir. Bir anahtarin ele gecirilmesi digerlerine sirayet etmez. Not: Bu "per-key isolation"dir, kesin kriptografik anlamda "forward secrecy" degildir — forward secrecy gecici (ephemeral) oturum anahtarlari gerektirir, bu farkli bir ozelliktir.
 - **Shared secret sifirlama:** Tum shared secret'lar `CryptographicOperations.ZeroMemory()` ile hemen temizlenir
 - **AES-256-GCM:** Ayri nonce ve tag ile kimlik dogrulamali sifreleme
 - **Key sifreleme:** Decapsulation key'ler PBKDF2 (100K iterasyon) + AES-256-GCM ile saklanir
@@ -270,6 +277,8 @@ Tum kriptografik operasyonlar `ILogger` ile loglanir:
 - .NET 10'daki ML-KEM API'leri `[Experimental]` (`SYSLIB5006`) — GA oncesinde degisebilir
 - BouncyCastle paket boyutuna ~2MB ekler
 - `IXmlEncryptor.Encrypt()` senkron — ag I/O yapan ozel `IKeyStore` uygulamalari dikkatli olmali
+- ML-KEM shared secret, HKDF gibi bir anahtar turetme adimi olmadan dogrudan AES-256-GCM anahtari olarak kullaniliyor. Mevcut tehdit modeli ve kimlik dogrulamali sifreleme baglaminda kabul edilebilir, ancak NIST SP 800-227 (taslak) domain separation kilavuzundan sapar. HKDF-SHA256 turetimi (domain-separated `info` string'leri ile) ileri bir majr surumde planlanmaktadir (format degisikligi; surum header'i arkasinda sunulacaktir).
+- Temeldeki ML-KEM keypair'leri icin henuz otomatik rotasyon yoktur. ASP.NET Core'un kendi Data Protection anahtar rotasyonu normal calisir; yalnizca ML-KEM key-encryption-key'leri, sarmaladigi Data Protection anahtarlarinin omru boyunca yasar. Zamanlanmis rotasyon yol haritasindadir.
 
 ---
 
