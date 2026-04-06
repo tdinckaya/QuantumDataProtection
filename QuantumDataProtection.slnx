@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QuantumDataProtection/QuantumDataProtection.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QuantumDataProtection.Tests/QuantumDataProtection.Tests.csproj" />
+  </Folder>
+</Solution>
