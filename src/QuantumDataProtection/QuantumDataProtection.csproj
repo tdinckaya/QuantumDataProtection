@@ -17,10 +17,15 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/tdinckaya/QuantumDataProtection</RepositoryUrl>
     <PackageProjectUrl>https://github.com/tdinckaya/QuantumDataProtection</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <ItemGroup>
