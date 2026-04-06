@@ -1,32 +1,30 @@
 using System.Security.Cryptography;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.DataProtection.XmlEncryption;
+using Microsoft.Extensions.Logging;
 
 namespace QuantumDataProtection;
 
 /// <summary>
 /// <see cref="IXmlEncryptor"/> that protects Data Protection XML keys using
 /// ML-KEM (FIPS 203) key encapsulation + AES-256-GCM symmetric encryption.
-/// <para>
-/// For each key, a fresh ML-KEM keypair is generated. The shared secret from
-/// encapsulation is used as the AES-256-GCM key. The decapsulation key is
-/// stored in the configured <see cref="IKeyStore"/>.
-/// </para>
 /// </summary>
 public sealed class MlKemXmlEncryptor : IXmlEncryptor
 {
     private readonly MlKemDataProtectionOptions _options;
     private readonly IKeyStore _keyStore;
     private readonly string _pkcs8Password;
+    private readonly ILogger? _logger;
 
     /// <summary>
     /// Initializes a new <see cref="MlKemXmlEncryptor"/>.
     /// </summary>
-    public MlKemXmlEncryptor(MlKemDataProtectionOptions options)
+    public MlKemXmlEncryptor(MlKemDataProtectionOptions options, ILoggerFactory? loggerFactory = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _keyStore = options.ResolveKeyStore();
         _pkcs8Password = options.ResolvePkcs8Password();
+        _logger = loggerFactory?.CreateLogger<MlKemXmlEncryptor>();
     }
 
     /// <summary>
@@ -38,35 +36,35 @@ public sealed class MlKemXmlEncryptor : IXmlEncryptor
 
         try
         {
-            // Generate a fresh ML-KEM keypair for this XML key
-            using var kemKey = MlKemKey.Generate(_options.Algorithm);
+            using var kemKey = MlKemKey.Generate(_options.Algorithm, _logger);
 
-            // Encapsulate → shared secret + ciphertext
             var (sharedSecret, kemCiphertext) = kemKey.Encapsulate();
 
             try
             {
-                // AES-256-GCM encrypt the XML
-                var nonce = new byte[12]; // 96-bit nonce
+                var nonce = new byte[12];
                 RandomNumberGenerator.Fill(nonce);
 
                 var ciphertext = new byte[plaintext.Length];
-                var tag = new byte[16]; // 128-bit tag
+                var tag = new byte[16];
 
                 using var aes = new AesGcm(sharedSecret, tagSizeInBytes: 16);
                 aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-                // Save decapsulation key to store (encrypted with user's password)
-                var encryptedDecapKey = kemKey.MlKem.ExportEncryptedPkcs8PrivateKey(
+                var encryptedDecapKey = kemKey.ExportEncryptedPkcs8PrivateKey(
                     _pkcs8Password,
                     new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100_000));
 
                 _keyStore.SavePrivateKeyAsync(kemKey.KeyId, encryptedDecapKey)
                     .GetAwaiter().GetResult();
 
-                // Build output XML
+                _logger?.LogDebug("XML key encrypted with ML-KEM. KeyId={KeyId}, Provider={Provider}",
+                    kemKey.KeyId, kemKey.ProviderName);
+
+                var algName = MlKemAlgorithms.ToAlgorithmString(_options.Algorithm);
+
                 var encryptedElement = new XElement("mlKemEncryptedKey",
-                    new XElement("algorithm", MlKemAlgorithms.ToAlgorithmString(kemKey.Algorithm)),
+                    new XElement("algorithm", algName),
                     new XElement("keyId", kemKey.KeyId),
                     new XElement("kemCiphertext", Convert.ToBase64String(kemCiphertext)),
                     new XElement("nonce", Convert.ToBase64String(nonce)),

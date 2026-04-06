@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace QuantumDataProtection;
 
@@ -18,28 +19,6 @@ public static class MlKemDataProtectionExtensions
     /// to your previous decryptor type for seamless migration.
     /// </para>
     /// </summary>
-    /// <example>
-    /// <code>
-    /// // New project (no legacy keys):
-    /// builder.Services.AddDataProtection()
-    ///     .ProtectKeysWithMlKem(options =>
-    ///     {
-    ///         options.Algorithm = MLKemAlgorithm.MLKem768;
-    ///         options.KeyStoreDirectory = "/var/keys";
-    ///         options.KeyStorePassword = config["KeyPassword"];
-    ///     });
-    ///
-    /// // Migration from certificate-based protection:
-    /// builder.Services.AddDataProtection()
-    ///     .ProtectKeysWithMlKem(options =>
-    ///     {
-    ///         options.Algorithm = MLKemAlgorithm.MLKem768;
-    ///         options.KeyStoreDirectory = "/var/keys";
-    ///         options.KeyStorePassword = config["KeyPassword"];
-    ///         options.LegacyDecryptorType = typeof(CertificateXmlDecryptor);
-    ///     });
-    /// </code>
-    /// </example>
     public static IDataProtectionBuilder ProtectKeysWithMlKem(
         this IDataProtectionBuilder builder,
         Action<MlKemDataProtectionOptions> configure)
@@ -47,11 +26,14 @@ public static class MlKemDataProtectionExtensions
         var options = new MlKemDataProtectionOptions();
         configure(options);
 
-        // Register options as singleton for encryptor, decryptor, and hybrid
         builder.Services.AddSingleton(options);
 
-        // Always encrypt new keys with ML-KEM
-        builder.Services.AddSingleton<IXmlEncryptor>(sp => new MlKemXmlEncryptor(options));
+        // Encryptor with optional logging
+        builder.Services.AddSingleton<IXmlEncryptor>(sp =>
+        {
+            var loggerFactory = sp.GetService<ILoggerFactory>();
+            return new MlKemXmlEncryptor(options, loggerFactory);
+        });
 
         // Decryptor: hybrid (ML-KEM + legacy fallback) or pure ML-KEM
         if (options.EnableLegacyKeyDecryption)

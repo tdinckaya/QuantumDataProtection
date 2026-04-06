@@ -1,78 +1,104 @@
+#pragma warning disable SYSLIB5006
+
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 
 namespace QuantumDataProtection;
 
 /// <summary>
-/// Wraps a .NET 10 <see cref="MLKem"/> instance for key encapsulation operations.
+/// ML-KEM key wrapper that automatically selects the best available provider:
+/// native .NET 10 on Windows/Linux, BouncyCastle fallback on macOS and older platforms.
 /// </summary>
 public sealed class MlKemKey : IDisposable
 {
-    private readonly bool _ownsKey;
-    private readonly bool _hasDecapsulationKey;
+    private readonly IMlKemKeyOperations _ops;
     private bool _disposed;
 
-    /// <summary>
-    /// Initializes a new instance wrapping an existing <see cref="MLKem"/> key.
-    /// </summary>
-    /// <exception cref="PlatformNotSupportedException">
-    /// Thrown when the current platform does not support ML-KEM.
-    /// </exception>
-    public MlKemKey(MLKem mlKem, bool ownsKey = true)
+    private MlKemKey(IMlKemKeyOperations ops)
     {
-        ThrowIfPlatformUnsupported();
-
-        MlKem = mlKem ?? throw new ArgumentNullException(nameof(mlKem));
-        Algorithm = mlKem.Algorithm;
-        _ownsKey = ownsKey;
-        _hasDecapsulationKey = TryDetectDecapsulationKey(mlKem);
-
-        KeyId = GenerateKeyId(mlKem);
+        _ops = ops;
     }
 
-    /// <summary>The underlying <see cref="MLKem"/> instance.</summary>
-    internal MLKem MlKem { get; }
-
-    /// <summary>The ML-KEM algorithm variant.</summary>
-    public MLKemAlgorithm Algorithm { get; }
-
     /// <summary>Unique key identifier derived from encapsulation key hash.</summary>
-    public string KeyId { get; }
+    public string KeyId => _ops.KeyId;
 
     /// <summary>Whether this key can perform decapsulation (has private key).</summary>
-    public bool HasDecapsulationKey => _hasDecapsulationKey;
+    public bool HasDecapsulationKey => _ops.HasDecapsulationKey;
+
+    /// <summary>The crypto provider being used ("Native (.NET 10)" or "BouncyCastle").</summary>
+    public string ProviderName => _ops.ProviderName;
+
+    /// <summary>The underlying operations (for internal use by encryptor/decryptor).</summary>
+    internal IMlKemKeyOperations Operations => _ops;
 
     // ── Static factory methods ───────────────────────────────────
 
     /// <summary>
-    /// Generates a new ML-KEM key pair (encapsulation + decapsulation).
+    /// Generates a new ML-KEM key pair. Automatically selects native or BouncyCastle provider.
     /// </summary>
-    public static MlKemKey Generate(MLKemAlgorithm? algorithm = null)
+    public static MlKemKey Generate(MLKemAlgorithm? algorithm = null, ILogger? logger = null)
     {
-        ThrowIfPlatformUnsupported();
-        var mlKem = MLKem.GenerateKey(algorithm ?? MLKemAlgorithm.MLKem768);
-        return new MlKemKey(mlKem, ownsKey: true);
+        var alg = algorithm ?? MLKemAlgorithm.MLKem768;
+        var algName = MlKemAlgorithms.ToAlgorithmString(alg);
+
+        IMlKemKeyOperations ops;
+
+        if (MLKem.IsSupported)
+        {
+            ops = NativeMlKemOperations.Generate(alg);
+        }
+        else
+        {
+            logger?.LogInformation("ML-KEM native not supported. Using BouncyCastle fallback.");
+            ops = BouncyCastleMlKemOperations.Generate(algName);
+        }
+
+        logger?.LogInformation("ML-KEM key generated. KeyId={KeyId}, Algorithm={Algorithm}, Provider={Provider}",
+            ops.KeyId, algName, ops.ProviderName);
+
+        return new MlKemKey(ops);
     }
 
     /// <summary>
-    /// Creates a key from an exported encapsulation key (encrypt/encapsulate only).
+    /// Creates a key from an exported encapsulation key (encapsulate only).
     /// </summary>
     public static MlKemKey FromEncapsulationKey(byte[] encapsulationKey, MLKemAlgorithm algorithm)
     {
-        ThrowIfPlatformUnsupported();
         ArgumentNullException.ThrowIfNull(encapsulationKey);
-        var mlKem = MLKem.ImportEncapsulationKey(algorithm, encapsulationKey);
-        return new MlKemKey(mlKem, ownsKey: true);
+        var algName = MlKemAlgorithms.ToAlgorithmString(algorithm);
+
+        var ops = MLKem.IsSupported
+            ? (IMlKemKeyOperations)NativeMlKemOperations.FromEncapsulationKey(encapsulationKey, algorithm)
+            : BouncyCastleMlKemOperations.FromEncapsulationKey(encapsulationKey, algName);
+
+        return new MlKemKey(ops);
     }
 
     /// <summary>
-    /// Creates a key from an exported decapsulation key (decrypt/decapsulate).
+    /// Creates a key from an exported decapsulation key (decapsulate).
     /// </summary>
     public static MlKemKey FromDecapsulationKey(byte[] decapsulationKey, MLKemAlgorithm algorithm)
     {
-        ThrowIfPlatformUnsupported();
         ArgumentNullException.ThrowIfNull(decapsulationKey);
-        var mlKem = MLKem.ImportDecapsulationKey(algorithm, decapsulationKey);
-        return new MlKemKey(mlKem, ownsKey: true);
+        var algName = MlKemAlgorithms.ToAlgorithmString(algorithm);
+
+        var ops = MLKem.IsSupported
+            ? (IMlKemKeyOperations)NativeMlKemOperations.FromDecapsulationKey(decapsulationKey, algorithm)
+            : BouncyCastleMlKemOperations.FromDecapsulationKey(decapsulationKey, algName);
+
+        return new MlKemKey(ops);
+    }
+
+    /// <summary>
+    /// Creates a key from an encrypted PKCS#8 private key.
+    /// </summary>
+    internal static MlKemKey FromEncryptedPkcs8(string password, byte[] encryptedKey)
+    {
+        var ops = MLKem.IsSupported
+            ? (IMlKemKeyOperations)NativeMlKemOperations.FromEncryptedPkcs8(password, encryptedKey)
+            : BouncyCastleMlKemOperations.FromEncryptedPkcs8(password, encryptedKey);
+
+        return new MlKemKey(ops);
     }
 
     // ── KEM operations ───────────────────────────────────────────
@@ -80,24 +106,19 @@ public sealed class MlKemKey : IDisposable
     /// <summary>
     /// Encapsulates a shared secret. Returns the shared secret and ciphertext.
     /// </summary>
-    /// <returns>A tuple of (sharedSecret, ciphertext).</returns>
     public (byte[] SharedSecret, byte[] Ciphertext) Encapsulate()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        MlKem.Encapsulate(out var ciphertext, out var sharedSecret);
-        return (sharedSecret, ciphertext);
+        return _ops.Encapsulate();
     }
 
     /// <summary>
     /// Decapsulates a shared secret from ciphertext.
     /// </summary>
-    /// <exception cref="InvalidOperationException">This key does not have a decapsulation key.</exception>
     public byte[] Decapsulate(byte[] ciphertext)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_hasDecapsulationKey)
-            throw new InvalidOperationException("This key does not contain a decapsulation key.");
-        return MlKem.Decapsulate(ciphertext);
+        return _ops.Decapsulate(ciphertext);
     }
 
     // ── Export methods ───────────────────────────────────────────
@@ -106,17 +127,21 @@ public sealed class MlKemKey : IDisposable
     public byte[] ExportEncapsulationKey()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return MlKem.ExportEncapsulationKey();
+        return _ops.ExportEncapsulationKey();
     }
 
     /// <summary>Exports the decapsulation (private) key.</summary>
-    /// <exception cref="InvalidOperationException">No decapsulation key available.</exception>
     public byte[] ExportDecapsulationKey()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_hasDecapsulationKey)
-            throw new InvalidOperationException("This key does not contain a decapsulation key.");
-        return MlKem.ExportDecapsulationKey();
+        return _ops.ExportDecapsulationKey();
+    }
+
+    /// <summary>Exports the private key as encrypted PKCS#8.</summary>
+    internal byte[] ExportEncryptedPkcs8PrivateKey(string password, PbeParameters pbeParams)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _ops.ExportEncryptedPkcs8PrivateKey(password, pbeParams);
     }
 
     // ── IDisposable ──────────────────────────────────────────────
@@ -125,39 +150,6 @@ public sealed class MlKemKey : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        if (_ownsKey)
-            MlKem.Dispose();
-    }
-
-    // ── Private helpers ──────────────────────────────────────────
-
-    private static void ThrowIfPlatformUnsupported()
-    {
-        if (!MLKem.IsSupported)
-            throw new PlatformNotSupportedException(
-                "ML-KEM is not supported on this platform. " +
-                "Requires Windows 11 / Server 2025 or Linux with OpenSSL 3.5+. " +
-                "macOS is not yet supported.");
-    }
-
-    private static bool TryDetectDecapsulationKey(MLKem mlKem)
-    {
-        try
-        {
-            _ = mlKem.ExportDecapsulationKey();
-            return true;
-        }
-        catch (CryptographicException)
-        {
-            return false;
-        }
-    }
-
-    private static string GenerateKeyId(MLKem mlKem)
-    {
-        var encapsulationKey = mlKem.ExportEncapsulationKey();
-        var hash = SHA256.HashData(encapsulationKey);
-        return Convert.ToBase64String(hash)
-            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        _ops.Dispose();
     }
 }

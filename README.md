@@ -95,11 +95,12 @@ For each Data Protection master key:
 
 ## Platform Requirements
 
-| Platform | Minimum Version | Status |
-|----------|----------------|--------|
-| Windows | Windows 11 / Server 2025 | Supported |
-| Linux | OpenSSL 3.5+ | Supported |
-| macOS | — | Not supported |
+| Platform | Provider | Status |
+|----------|----------|--------|
+| Windows 11 / Server 2025 | Native .NET 10 | Supported |
+| Linux (OpenSSL 3.5+) | Native .NET 10 | Supported |
+| **macOS** | **BouncyCastle** | **Supported** |
+| Older Linux | BouncyCastle | Supported |
 
 Requires **.NET 10** SDK.
 

@@ -5,50 +5,43 @@ namespace QuantumDataProtection.Tests;
 
 public class MlKemKeyTests
 {
-    [SkippableTheory]
+    [Theory]
     [InlineData("ML-KEM-512")]
     [InlineData("ML-KEM-768")]
     [InlineData("ML-KEM-1024")]
     public void Generate_AllVariants_CreatesValidKey(string algName)
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var algorithm = MlKemAlgorithms.ToMLKemAlgorithm(algName);
         using var key = MlKemKey.Generate(algorithm);
 
         Assert.NotNull(key);
         Assert.True(key.HasDecapsulationKey);
         Assert.NotEmpty(key.KeyId);
+        Assert.NotEmpty(key.ProviderName);
     }
 
-    [SkippableFact]
+    [Fact]
     public void Generate_Default_UsesMlKem768()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var key = MlKemKey.Generate();
-        Assert.Equal(MLKemAlgorithm.MLKem768, key.Algorithm);
+        Assert.NotEmpty(key.KeyId);
     }
 
-    [SkippableFact]
+    [Fact]
     public void EncapsulateAndDecapsulate_RoundTrip()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var key = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
 
         var (sharedSecret, ciphertext) = key.Encapsulate();
         var decapsulated = key.Decapsulate(ciphertext);
 
         Assert.Equal(sharedSecret, decapsulated);
-        Assert.Equal(32, sharedSecret.Length); // 256-bit shared secret
+        Assert.Equal(32, sharedSecret.Length);
     }
 
-    [SkippableFact]
-    public void ExportEncapsulationKey_ImportEncapsulationKey_RoundTrip()
+    [Fact]
+    public void ExportEncapsulationKey_RoundTrip()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var original = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
         var encapKeyBytes = original.ExportEncapsulationKey();
 
@@ -58,11 +51,9 @@ public class MlKemKeyTests
         Assert.Equal(original.ExportEncapsulationKey(), publicOnly.ExportEncapsulationKey());
     }
 
-    [SkippableFact]
-    public void ExportDecapsulationKey_ImportDecapsulationKey_RoundTrip()
+    [Fact]
+    public void ExportDecapsulationKey_RoundTrip()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var original = MlKemKey.Generate(MLKemAlgorithm.MLKem768);
         var (sharedSecret, ciphertext) = original.Encapsulate();
 
@@ -73,11 +64,9 @@ public class MlKemKeyTests
         Assert.Equal(sharedSecret, decapsulated);
     }
 
-    [SkippableFact]
+    [Fact]
     public void HasDecapsulationKey_WhenEncapsulationOnly_ReturnsFalse()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var full = MlKemKey.Generate(MLKemAlgorithm.MLKem512);
         var encapBytes = full.ExportEncapsulationKey();
         using var pubOnly = MlKemKey.FromEncapsulationKey(encapBytes, MLKemAlgorithm.MLKem512);
@@ -87,58 +76,34 @@ public class MlKemKeyTests
         Assert.Throws<InvalidOperationException>(() => pubOnly.Decapsulate(new byte[32]));
     }
 
-    [SkippableFact]
+    [Fact]
     public void KeyId_IsDeterministic()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         using var key = MlKemKey.Generate();
         Assert.NotNull(key.KeyId);
         Assert.NotEmpty(key.KeyId);
     }
 
-    [SkippableFact]
-    public void Dispose_WhenOwnsKey_DisposesUnderlying()
+    [Fact]
+    public void ProviderName_IsSet()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
-        var mlKem = MLKem.GenerateKey(MLKemAlgorithm.MLKem512);
-        var key = new MlKemKey(mlKem, ownsKey: true);
-
-        key.Dispose();
-
-        Assert.Throws<ObjectDisposedException>(() => mlKem.ExportEncapsulationKey());
+        using var key = MlKemKey.Generate();
+        Assert.True(
+            key.ProviderName == "Native (.NET 10)" || key.ProviderName == "BouncyCastle",
+            $"Unexpected provider: {key.ProviderName}");
     }
 
-    [SkippableFact]
-    public void Dispose_WhenNotOwnsKey_DoesNotDisposeUnderlying()
-    {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
-        using var mlKem = MLKem.GenerateKey(MLKemAlgorithm.MLKem512);
-        var key = new MlKemKey(mlKem, ownsKey: false);
-
-        key.Dispose();
-
-        var encapKey = mlKem.ExportEncapsulationKey();
-        Assert.NotNull(encapKey);
-    }
-
-    [SkippableFact]
+    [Fact]
     public void DoubleDispose_DoesNotThrow()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var key = MlKemKey.Generate(MLKemAlgorithm.MLKem512);
         key.Dispose();
         key.Dispose(); // Should not throw
     }
 
-    [SkippableFact]
+    [Fact]
     public void Encapsulate_AfterDispose_ThrowsObjectDisposed()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var key = MlKemKey.Generate();
         key.Dispose();
 

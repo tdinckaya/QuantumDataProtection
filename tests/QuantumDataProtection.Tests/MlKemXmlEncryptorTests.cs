@@ -30,10 +30,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         };
     }
 
-    [SkippableFact]
+    [Fact]
     public void Encrypt_ProducesValidXmlStructure()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var encryptor = new MlKemXmlEncryptor(options);
@@ -54,10 +53,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.Equal("ML-KEM-768", xml.Element("algorithm")!.Value);
     }
 
-    [SkippableFact]
+    [Fact]
     public void Encrypt_SavesDecapsulationKeyToStore()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var encryptor = new MlKemXmlEncryptor(options);
@@ -73,13 +71,12 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.True(savedKey!.Length > 0);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData("ML-KEM-512")]
     [InlineData("ML-KEM-768")]
     [InlineData("ML-KEM-1024")]
     public void EncryptDecrypt_RoundTrip_AllAlgorithms(string algName)
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var algorithm = MlKemAlgorithms.ToMLKemAlgorithm(algName);
         var options = CreateOptions(algorithm);
@@ -102,10 +99,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.Equal(original.ToString(), decrypted.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public void EncryptDecrypt_LargeXml_Works()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var encryptor = new MlKemXmlEncryptor(options);
@@ -132,10 +128,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.Equal(original.ToString(), decrypted.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public void Decrypt_MissingKeyInStore_ThrowsCryptographicException()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var encryptor = new MlKemXmlEncryptor(options);
@@ -156,10 +151,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.Throws<CryptographicException>(() => decryptor.Decrypt(encrypted.EncryptedElement));
     }
 
-    [SkippableFact]
+    [Fact]
     public void Decrypt_CorruptedXml_MissingElement_ThrowsCryptographicException()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var services = new ServiceCollection();
@@ -174,10 +168,9 @@ public class MlKemXmlEncryptorTests : IDisposable
         Assert.Throws<CryptographicException>(() => decryptor.Decrypt(corruptedXml));
     }
 
-    [SkippableFact]
+    [Fact]
     public void Decrypt_UnsupportedAlgorithm_ThrowsCryptographicException()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var services = new ServiceCollection();

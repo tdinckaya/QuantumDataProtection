@@ -33,10 +33,9 @@ public class HybridXmlDecryptorTests : IDisposable
         };
     }
 
-    [SkippableFact]
+    [Fact]
     public void MlKemEncryptedXml_DecryptedByMlKem()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = CreateOptions();
         var encryptor = new MlKemXmlEncryptor(options);
@@ -55,10 +54,9 @@ public class HybridXmlDecryptorTests : IDisposable
         Assert.Equal(original.ToString(), decrypted.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public void NonMlKemXml_WithFallback_DecryptedByFallback()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         // Create a fake legacy-encrypted XML
         var legacyXml = new XElement("encryptedKey",
@@ -77,10 +75,9 @@ public class HybridXmlDecryptorTests : IDisposable
         Assert.Equal("legacyDecrypted", decrypted.Name.LocalName);
     }
 
-    [SkippableFact]
+    [Fact]
     public void NonMlKemXml_NoFallback_ThrowsCryptographicException()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var legacyXml = new XElement("encryptedKey", "something");
 
@@ -97,10 +94,9 @@ public class HybridXmlDecryptorTests : IDisposable
         Assert.Contains("no legacy decryptor", ex.Message);
     }
 
-    [SkippableFact]
+    [Fact]
     public void EnableLegacyKeyDecryption_False_UsesPureMlKemDecryptor()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
 
         var options = new MlKemDataProtectionOptions
         {

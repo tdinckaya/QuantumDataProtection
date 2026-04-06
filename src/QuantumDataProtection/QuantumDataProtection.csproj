@@ -9,7 +9,7 @@
 
     <!-- NuGet metadata -->
     <PackageId>QuantumDataProtection</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Tansel DİNÇKAYA</Authors>
     <Description>Post-quantum key wrapping for ASP.NET Core Data Protection using ML-KEM (FIPS 203). Protects cookies, sessions, and anti-forgery tokens against harvest-now-decrypt-later attacks.</Description>
     <PackageTags>data-protection;post-quantum;ml-kem;kyber;encryption;fips-203;pqc;asp-net-core</PackageTags>
@@ -25,6 +25,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="QuantumDataProtection.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
   </ItemGroup>
 
 </Project>

@@ -42,4 +42,15 @@ public static class MlKemAlgorithms
         if (algorithm == MLKemAlgorithm.MLKem1024) return MlKem1024;
         throw new ArgumentException($"Unknown MLKemAlgorithm: {algorithm.Name}", nameof(algorithm));
     }
+
+    /// <summary>
+    /// Returns the string identifier for a BouncyCastle MLKemParameters instance.
+    /// </summary>
+    internal static string ToAlgorithmString(Org.BouncyCastle.Crypto.Parameters.MLKemParameters bcParams)
+    {
+        if (bcParams == Org.BouncyCastle.Crypto.Parameters.MLKemParameters.ml_kem_512) return MlKem512;
+        if (bcParams == Org.BouncyCastle.Crypto.Parameters.MLKemParameters.ml_kem_768) return MlKem768;
+        if (bcParams == Org.BouncyCastle.Crypto.Parameters.MLKemParameters.ml_kem_1024) return MlKem1024;
+        throw new ArgumentException($"Unknown BouncyCastle MLKemParameters", nameof(bcParams));
+    }
 }

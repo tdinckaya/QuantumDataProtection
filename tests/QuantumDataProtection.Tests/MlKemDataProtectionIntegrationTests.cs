@@ -23,11 +23,9 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
             Directory.Delete(_testDir, recursive: true);
     }
 
-    [SkippableFact]
+    [Fact]
     public void ProtectUnprotect_EndToEnd_WithDataProtectionProvider()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var services = new ServiceCollection();
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(_keyDir))
@@ -38,7 +36,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
                 options.KeyStorePassword = "integration-test-password";
             });
 
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
         var dpProvider = sp.GetRequiredService<IDataProtectionProvider>();
         var protector = dpProvider.CreateProtector("test-purpose");
 
@@ -50,11 +48,9 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
         Assert.NotEqual(original, encrypted);
     }
 
-    [SkippableFact]
+    [Fact]
     public void ProtectUnprotect_DifferentPurposes_CannotCrossDecrypt()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var services = new ServiceCollection();
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(_keyDir))
@@ -65,7 +61,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
                 options.KeyStorePassword = "integration-test-password";
             });
 
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
         var dpProvider = sp.GetRequiredService<IDataProtectionProvider>();
 
         var protectorA = dpProvider.CreateProtector("purpose-A");
@@ -79,10 +75,7 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
     [SkippableFact]
     public void ProtectUnprotect_DecapsulationKeyIsStoredInKeyStore()
     {
-        Skip.IfNot(MLKem.IsSupported, "ML-KEM not supported on this platform.");
-
         var kemKeyDir = Path.Combine(_testDir, "kem-keys-check");
-        // Use a fresh, empty key directory to force new key creation
         var freshKeyDir = Path.Combine(_testDir, "dp-keys-fresh");
         Directory.CreateDirectory(freshKeyDir);
 
@@ -103,7 +96,6 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
 
         _ = protector.Protect("trigger key creation");
 
-        // The IXmlEncryptor should have been called, creating the .p8 file
         if (Directory.Exists(kemKeyDir))
         {
             var keyFiles = Directory.GetFiles(kemKeyDir, "*.p8");
@@ -111,9 +103,6 @@ public class MlKemDataProtectionIntegrationTests : IDisposable
         }
         else
         {
-            // If directory doesn't exist, IXmlEncryptor was not invoked.
-            // This can happen when Data Protection uses an in-memory key
-            // or reuses a cached key ring. Skip rather than fail.
             Skip.If(true, "Data Protection did not invoke IXmlEncryptor — key ring was cached.");
         }
     }
